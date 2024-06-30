@@ -1,0 +1,126 @@
+import numpy as np 
+import pandas as pd 
+import matplotlib.pyplot as plt 
+import seaborn as sb 
+
+from sklearn.model_selection import train_test_split 
+from sklearn.preprocessing import StandardScaler 
+from sklearn.linear_model import LogisticRegression 
+from sklearn.svm import SVC 
+from xgboost import XGBClassifier 
+from sklearn import metrics 
+from sklearn.metrics import plot_confusion_matrix
+
+import warnings 
+warnings.filterwarnings('ignore')
+
+# Load the dataset
+df = pd.read_csv('/content/Tesla.csv') 
+
+# Display initial information about the dataset
+print(df.head())
+print(df.shape)
+print(df.describe())
+print(df.info())
+
+# Plot Tesla's close price over time
+plt.figure(figsize=(15, 5)) 
+plt.plot(df['Close']) 
+plt.title('Tesla Close Price', fontsize=15) 
+plt.ylabel('Price in dollars') 
+plt.show()
+
+# Check and drop the 'Adj Close' column if it's identical to 'Close'
+print(df[df['Close'] == df['Adj Close']].shape)
+df = df.drop(['Adj Close'], axis=1)
+
+# Check for missing values
+print(df.isnull().sum())
+
+# Define the features to visualize
+features = ['Open', 'High', 'Low', 'Close', 'Volume'] 
+
+# Plot the distribution of each feature
+plt.subplots(figsize=(20, 10)) 
+for i, col in enumerate(features): 
+    plt.subplot(2, 3, i + 1) 
+    sb.histplot(df[col]) 
+plt.show()
+
+# Plot boxplots for each feature
+plt.subplots(figsize=(20, 10)) 
+for i, col in enumerate(features): 
+    plt.subplot(2, 3, i + 1) 
+    sb.boxplot(df[col]) 
+plt.show()
+
+# Extract day, month, and year from the 'Date' column
+splitted = df['Date'].str.split('/', expand=True) 
+df['day'] = splitted[1].astype('int') 
+df['month'] = splitted[0].astype('int') 
+df['year'] = splitted[2].astype('int') 
+
+print(df.head())
+
+# Create a new feature 'is_quarter_end'
+df['is_quarter_end'] = np.where(df['month'] % 3 == 0, 1, 0) 
+print(df.head())
+
+# Group data by year and plot the mean values
+data_grouped = df.groupby('year').mean() 
+plt.subplots(figsize=(20, 10)) 
+for i, col in enumerate(['Open', 'High', 'Low', 'Close']): 
+    plt.subplot(2, 2, i + 1) 
+    data_grouped[col].plot.bar() 
+plt.show()
+
+# Group by 'is_quarter_end' and calculate mean
+print(df.groupby('is_quarter_end').mean())
+
+# Create new features 'open-close' and 'low-high'
+df['open-close'] = df['Open'] - df['Close'] 
+df['low-high'] = df['Low'] - df['High'] 
+
+# Create the target variable
+df['target'] = np.where(df['Close'].shift(-1) > df['Close'], 1, 0)
+
+# Plot the distribution of the target variable
+plt.pie(df['target'].value_counts().values, 
+        labels=[0, 1], autopct='%1.1f%%') 
+plt.show()
+
+# Plot the correlation heatmap
+plt.figure(figsize=(10, 10)) 
+sb.heatmap(df.corr() > 0.9, annot=True, cbar=False) 
+plt.show()
+
+# Select features and target
+features = df[['open-close', 'low-high', 'is_quarter_end']] 
+target = df['target'] 
+
+# Scale the features
+scaler = StandardScaler() 
+features = scaler.fit_transform(features) 
+
+# Split the data into training and validation sets
+X_train, X_valid, Y_train, Y_valid = train_test_split(
+    features, target, test_size=0.1, random_state=2022) 
+
+print(X_train.shape, X_valid.shape) 
+
+# Define models
+models = [LogisticRegression(), SVC(kernel='poly', probability=True), XGBClassifier()] 
+
+# Train and evaluate models
+for model in models: 
+    model.fit(X_train, Y_train) 
+    print(f'{model} : ') 
+    print('Training Accuracy : ', metrics.roc_auc_score(
+        Y_train, model.predict_proba(X_train)[:, 1])) 
+    print('Validation Accuracy : ', metrics.roc_auc_score(
+        Y_valid, model.predict_proba(X_valid)[:, 1])) 
+    print()
+
+# Plot confusion matrix for Logistic Regression model
+plot_confusion_matrix(models[0], X_valid, Y_valid) 
+plt.show()
